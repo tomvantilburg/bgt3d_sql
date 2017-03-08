@@ -1,0 +1,32 @@
+﻿select plv8_startup();
+do language plv8 'load_module("d3")';
+do language plv8 'load_module("topojson")';
+do language plv8 ' load_module("topojsonclient")';
+do language plv8 ' load_module("simplify")';
+
+WITH 
+arcs AS (
+	SELECT a.id,
+	d3_transform(a.data, b.data) as arc 
+	,d3_topoBBox(a.data, b.data) geom
+	,d3_arcToGeom(a.data, b.data) geom2,
+	b.data as transform
+	FROM tmp.arcs a,tmp.arcs b 
+	WHERE a.type = 'arc' AND b.type = 'transform'
+	AND a.data Is Not Null
+	--LIMIT 1000
+)
+,arcwithpoints AS (
+	SELECT transform, a.id, a.arc, PC_Union(PC_FilterEquals(pa,'classification',2)) pa FROM 
+	arcs a
+	--Careful, here is an innerjoin. There might not be any intersecting patch with the arc
+	INNER JOIN ahn3_pointcloud.vw_ahn3 b
+	ON ST_Intersects(ST_SetSrid(a.geom2,28992), Geometry(b.pa))
+	GROUP BY a.id, a.arc, transform
+)
+UPDATE tmp.arcs a SET data= d3_untransform(patch_to_arc(b.pa,b.arc),b.transform) 
+--SELECT COUNT(*)
+FROM 
+--tmp.arcs a, 
+arcwithpoints b 
+WHERE a.id = b.id AND a.type = 'arc';

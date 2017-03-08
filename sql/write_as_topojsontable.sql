@@ -4,17 +4,26 @@ do language plv8 'load_module("topojson")';
 do language plv8 ' load_module("topojsonclient")';
 do language plv8 ' load_module("simplify")';
 
+DROP SEQUENCE IF EXISTS arcid;
+DROP SEQUENCE IF EXISTS featid;
+DROP SEQUENCE IF EXISTS neighbourid;
 CREATE SEQUENCE arcid START WITH 1;
 CREATE SEQUENCE featid START WITH 1;
+CREATE SEQUENCE neighbourid START WITH 1;
 DROP TABLE IF EXISTS tmp.arcs;
 CREATE TABLE tmp.arcs AS
 WITH bounds AS (
-	SELECT ST_MakeEnvelope(93660,464003,94765,464635,28992) as box
+	SELECT ST_MakeEnvelope(93705,463738, 93871,463855,28992) as box --small burgt leiden
+	--SELECT ST_MakeEnvelope(93726,463759 , 93847,463844,28992) as box
 )
 ,entities AS (
 	SELECT ogc_fid AS gid, type, geom
 	FROM bgt.polygons, bounds b
 	WHERE ST_Intersects(geom, box) --AND (ogc_fid = 1245832 OR ogc_fid = 1213681)
+	UNION ALL
+	SELECT ogc_fid AS gid, 'pand'::text as type, wkb_geometry as geom
+	FROM bgt.pand_2dactueelbestaand, bounds b
+	WHERE ST_Intersects(wkb_geometry, box) --AND (ogc_fid = 1245832 OR ogc_fid = 1213681)
 ),
 properties AS (
 	SELECT gid, type
@@ -35,15 +44,19 @@ features AS (
 ),
 topojson AS (
 	SELECT 
-	d3_totopojson(
+	d3_raisebuildings(
+	  d3_totopojson(
 		'{"type": "FeatureCollection"}'::JSONB || 
 		jsonb_set(
 			'{}'::JSONB,
 			'{features}',
 			jsonb_agg(feat))
-		,1e9) AS topojson
+		,1e9)
+	  ,'pand') AS topojson
 	FROM features
 )
+
+
 
 SELECT 
 	'arc'::text AS type, 
@@ -62,7 +75,17 @@ SELECT
 	'transform'::text AS type, 
 	1 as id, 
 	(topojson.topojson->'transform')::JSONB AS data 
-	FROM topojson;
-
+	FROM topojson
+UNION ALL
+SELECT
+	'neighbours'::text AS type,
+	nextval('neighbourid') id,
+	row_data::JSONB AS data
+	FROM topojson,
+	LATERAL jsonb_array_elements(d3_toponeighbours(topojson->'objects'->'entities'->'geometries')) AS row_data
+	;
+	
+	
 DROP SEQUENCE arcid;
 DROP SEQUENCE featid;
+DROP SEQUENCE neighbourid;
