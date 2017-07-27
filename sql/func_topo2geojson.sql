@@ -9,12 +9,17 @@ as $$
 
 	function decodeArc(transform, arc) {
 	  var x = 0, y = 0;
-	  return arc.map(function(position) {
-	    position = position.slice();
-	    position[0] = (x += position[0]) * transform.scale[0] + transform.translate[0];
-	    position[1] = (y += position[1]) * transform.scale[1] + transform.translate[1];
-	    return position;
-	  });
+	  try {
+		  return arc.map(function(position) {
+			position = position.slice();
+			position[0] = (x += position[0]) * transform.scale[0] + transform.translate[0];
+			position[1] = (y += position[1]) * transform.scale[1] + transform.translate[1];
+			return position;
+		  });
+		}
+		catch(e){
+			plv8.elog(NOTICE,arc);
+		}
 	}
 	
 	var arcsundelta = arcs.map(function(a){
